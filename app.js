@@ -8,8 +8,18 @@ const llmId = 'llm_5054f2c9c2e1d13ada371c0bc990';
 const retellWebClient = new RetellWebClient();
 
 document.getElementById("startCallButton").addEventListener("click", async () => {
+    // Request microphone permission
+    try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        document.getElementById("status").innerText = "Status: Microphone Access Granted";
+    } catch (error) {
+        console.error("Microphone access denied:", error);
+        document.getElementById("status").innerText = "Status: Microphone Access Denied";
+        return;
+    }
+
     document.getElementById("status").innerText = "Status: Connecting...";
-    
+
     try {
         // Make a server call to get the access token (this should be handled securely in production)
         const response = await fetch('/get-access-token', {
@@ -20,13 +30,14 @@ document.getElementById("startCallButton").addEventListener("click", async () =>
             body: JSON.stringify({ agentId, llmId })
         });
         const { accessToken } = await response.json();
-        
+
         // Start the call
         await retellWebClient.startCall({
             accessToken: accessToken,
             sampleRate: 24000,  // Optional: Set sample rate
             captureDeviceId: 'default',  // Optional: Device ID of the mic
-            playbackDeviceId: 'default'  // Optional: Device ID of the speaker
+            playbackDeviceId: 'default',  // Optional: Device ID of the speaker
+            emitRawAudioSamples: true  // Enable audio events to hear the agent's voice
         });
 
         document.getElementById("status").innerText = "Status: Connected";
@@ -61,4 +72,17 @@ retellWebClient.on("agent_start_talking", () => {
 
 retellWebClient.on("agent_stop_talking", () => {
     console.log("Agent stopped talking");
+});
+
+// Handle audio playback if emitRawAudioSamples is enabled
+retellWebClient.on("audio", (audio) => {
+    // Convert the Float32Array audio to a playable audio format
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const buffer = audioContext.createBuffer(1, audio.length, 24000);
+    buffer.copyToChannel(audio, 0);
+
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+    source.start();
 });
